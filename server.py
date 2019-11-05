@@ -120,7 +120,6 @@ class ClientServerProtocol(asyncio.Protocol):
         try:
             resp = self.process_data(decoded_data)
         except (AnaliseError, ServerError) as err:
-            # формируем ошибку, в случае ожидаемых исключений
             self.transport.write(f"error\n{err}\n\n".encode())
             return
 
