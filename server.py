@@ -5,14 +5,6 @@ class ServerError(Exception):
     pass
 
 
-class AnaliseError(ServerError):
-    pass
-
-
-class ConnectionError(ServerError):
-    pass
-
-
 class Memory:
     # Class for storage of metrics.
     def __init__(self):
@@ -20,110 +12,52 @@ class Memory:
 
     # Finding information about metrics.
     def find(self, key):
-        item = self.store
-
-        if key != "*":
-            if key in item:
-                it = item.get(key)
-                item = dict()
-                item[key] = it
-            else:
-                item = dict()
-                item[key] = {}
-
-        metric = dict()
-        for key, timestamp in item.items():
-            metric[key] = sorted(timestamp.items())
-
-        return metric
+        resp = 'ok\n'
+        if key == '*':
+            for key, values in self.store.items():
+                for val in values:
+                    resp += (key + ' ' + val[1] + ' ' + val[0] + '\n')
+        elif key in self.store:
+                for val in self.store[key]:
+                    resp += (key + ' ' + val[1] + ' ' + val[0] + '\n')
+        return resp + '\n'
 
     # Building te main dictionary with metrics.
     def build(self, key, value, timestamp):
+        if key == '*':
+            return 'error\nwrong command\n\n'
         if key not in self.store:
-            self.store[key] = dict()
-
-        self.store[key][timestamp] = value
+            self.store[key] = []
+        if (timestamp, value) not in self.store[key]:
+            self.store[key].append((timestamp, value))
+            self.store[key].sort(key=lambda x: x[0])
+        return 'ok\n\n'
 
 
 class ClientServerProtocol(asyncio.Protocol):
     memory = Memory()
 
-    def __init__(self):
-        super().__init__()
-        self.datas = b''
-
-    # Different argument for put and get fo None.
-    def main(self, method, name, value=None, timestamp=None):
-        if method == "put":
-            return self.memory.build(name, value, timestamp)
-        elif method == "get":
-            return self.memory.find(name)
-        else:
-            raise ValueError
-
-    # Working with data and messages.
-    def process_data(self, data):
-        parts_of_message = data.split("\n")
-        commands = []
-        for part in parts_of_message:
-            if not part:
-                continue
-
-            try:
-                method, params = part.strip().split(" ", 1)
-                if method == "put":
-                    key, value, timestamp = params.split()
-                    commands.append((method, key, float(value), int(timestamp)))
-                elif method == "get":
-                    commands.append((method, params))
-                else:
-                    self.transport.write(f"error\nwrongcommand\n\n".encode())
-            except ServerError:
-                pass
-
-        responses = []
-        for command in commands:
-            resp = self.main(*command)
-            responses.append(resp)
-
-        row = []
-
-        for response in responses:
-            if not response:
-                continue
-            for key, values in response.items():
-                for timestamp, value in values:
-                    row.append(f"{key} {value} {timestamp}")
-
-        result = "ok\n"
-
-        if row:
-            result += "\n".join(row) + "\n"
-
-        return result + "\n"
-
     def connection_made(self, transport):
         self.transport = transport
 
     def data_received(self, data):
-        self.datas += data
         try:
-            decoded_data = self.datas.decode()
-        except UnicodeDecodeError:
-            return
+            resp = self.process_data(data.decode('utf-8').strip('\n'))
+            self.transport.write(resp.encode('utf-8'))
+        except ServerError:
+            pass
 
-        if not decoded_data.endswith('\n'):
-            return
-
-        self.datas = b''
-
+    def process_data(self, data):
         try:
-            resp = self.process_data(decoded_data)
-        except (AnaliseError, ServerError) as err:
-            self.transport.write(f"error\n{err}\n\n".encode())
-            return
-
-        self.transport.write(resp.encode())
+            pieces = data.split(' ')
+            if pieces[0] == 'get':
+                return self.memory.find(pieces[1])
+            elif pieces[0] == 'put':
+                return self.memory.build(pieces[1], pieces[2], pieces[3])
+            else:
+                return 'error\nwrong command\n\n'
+        except ServerError:
+            pass
 
 
 def run_server(host, port):
