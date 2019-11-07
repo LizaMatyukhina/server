@@ -14,12 +14,13 @@ class Memory:
     def find(self, key):
         resp = 'ok\n'
         if key == '*':
-            for key, values in self.store.items():
-                for val in values:
-                    resp += (key + ' ' + val[1] + ' ' + val[0] + '\n')
+            for key, value in self.store.items():
+                for v in value:
+                    resp += f'{key} {v[1]} {v[0]}\n'
+
         elif key in self.store:
-                for val in self.store[key]:
-                    resp += (key + ' ' + val[1] + ' ' + val[0] + '\n')
+            for v in self.store[key]:
+                resp += f'{key} {v[1]} {v[0]}\n'
         return resp + '\n'
 
     # Building te main dictionary with metrics.
@@ -37,23 +38,26 @@ class Memory:
 class ClientServerProtocol(asyncio.Protocol):
     memory = Memory()
 
+    def __init__(self):
+        pass
+
     def connection_made(self, transport):
         self.transport = transport
 
     def data_received(self, data):
         try:
-            resp = self.process_data(data.decode('utf-8').strip('\n'))
-            self.transport.write(resp.encode('utf-8'))
+            resp = self.process_data(data.decode("utf-8").strip('\n'))
+            self.transport.write(resp.encode("utf-8"))
         except ServerError:
             pass
 
     def process_data(self, data):
         try:
-            pieces = data.split(' ')
-            if pieces[0] == 'get':
-                return self.memory.find(pieces[1])
-            elif pieces[0] == 'put':
-                return self.memory.build(pieces[1], pieces[2], pieces[3])
+            main = data.split(' ')
+            if main[0] == 'get':
+                return self.memory.find(main[1])
+            elif main[0] == 'put':
+                return self.memory.build(main[1], main[2], main[3])
             else:
                 return 'error\nwrong command\n\n'
         except ServerError:
